@@ -56,18 +56,18 @@ const (
 // access to a given resource. This struct is easily embedded in
 // other types to extend the permissions (see examples).
 type Permission struct {
-	ID        int64                `json:"id" db:"id"`
-	Name      string               `json:"name" db:"name"`
-	Abilities map[Ability]struct{} `json:"abilities" db:"abilities"`
+	ID        int64                `json:"id" db:"id" toml:"id" yaml:"id"`
+	Name      string               `json:"name" db:"name" toml:"name" yaml:"name"`
+	Abilities map[Ability]struct{} `json:"abilities" db:"abilities" toml:"abilities" yaml:"abilities"`
 }
 
 // Role provides typed structure for general roles that
 // enumerates a set of permissions. This struct is easily embedded in
 // other types to extend the role (see examples).
 type Role struct {
-	ID          int64                 `json:"id" db:"id"`
-	Name        string                `json:"name" db:"name"`
-	Permissions map[string]Permission `json:"permissions" db:"permissions"`
+	ID          int64                 `json:"id" db:"id" toml:"id" yaml:"id"`
+	Name        string                `json:"name" db:"name" toml:"name" yaml:"name"`
+	Permissions map[string]Permission `json:"permissions" db:"permissions" toml:"permissions" yaml:"permissions"`
 }
 
 type Comparable interface {
