@@ -7,8 +7,10 @@ package can
 
 import (
 	"context"
+	"strings"
 
 	"golang.org/x/exp/constraints"
+	"gopkg.in/yaml.v3"
 )
 
 // CanFn is a type for the implementing custom authorization functions.
@@ -22,8 +24,6 @@ func (a Ability) String() string {
 	switch a {
 	case Manage:
 		return "Manage"
-	case ReadAll:
-		return "ReadAll"
 	case Read:
 		return "Read"
 	case Create:
@@ -37,11 +37,26 @@ func (a Ability) String() string {
 	return "Custom"
 }
 
+func stringToAbility(s string) Ability {
+	switch strings.ToLower(s) {
+	case "manage":
+		return Manage
+	case "read":
+		return Read
+	case "create":
+		return Create
+	case "update":
+		return Update
+	case "delete":
+		return Delete
+	}
+
+	return 100
+}
+
 const (
 	// Manage is a default for full control or "admin" abilities.
 	Manage Ability = iota
-	// ReadAll is a default for all items of a given resource.
-	ReadAll
 	// Read is a default for access to a given resource.
 	Read
 	// Create is a default for creating a given resource.
@@ -56,18 +71,56 @@ const (
 // access to a given resource. This struct is easily embedded in
 // other types to extend the permissions (see examples).
 type Permission struct {
-	ID        int64                `json:"id" db:"id" toml:"id" yaml:"id"`
-	Name      string               `json:"name" db:"name" toml:"name" yaml:"name"`
-	Abilities map[Ability]struct{} `json:"abilities" db:"abilities" toml:"abilities" yaml:"abilities"`
+	Abilities map[Ability]struct{} `json:"abilities" db:"abilities" yaml:"abilities"`
 }
 
 // Role provides typed structure for general roles that
 // enumerates a set of permissions. This struct is easily embedded in
 // other types to extend the role (see examples).
 type Role struct {
-	ID          int64                 `json:"id" db:"id" toml:"id" yaml:"id"`
-	Name        string                `json:"name" db:"name" toml:"name" yaml:"name"`
-	Permissions map[string]Permission `json:"permissions" db:"permissions" toml:"permissions" yaml:"permissions"`
+	Permissions map[string]Permission `json:"permissions" db:"permissions" yaml:"permissions"`
+}
+
+type Roles map[string]*Role
+
+type diskRole struct {
+	Permission map[string][]string `yaml:"permissions"`
+}
+
+type diskRoles map[string]diskRole
+
+func (r Roles) UnmarshalYAML(value *yaml.Node) error {
+	var diskYaml diskRoles
+	if err := value.Decode(&diskYaml); err != nil {
+		return err
+	}
+
+	for k, v := range diskYaml {
+		p := buildPermissions(v.Permission)
+		r[k] = &Role{
+			Permissions: p,
+		}
+	}
+
+	return nil
+}
+
+func buildPermissions(dp map[string][]string) map[string]Permission {
+	p := make(map[string]Permission)
+	for k, v := range dp {
+		p[k] = Permission{Abilities: buildAbility(v)}
+	}
+
+	return p
+}
+
+func buildAbility(abilities []string) map[Ability]struct{} {
+	a := make(map[Ability]struct{})
+	for _, ability := range abilities {
+		a[Ability(stringToAbility(ability))] = struct{}{}
+	}
+
+	return a
 }
 
 type Comparable interface {
@@ -96,20 +149,7 @@ func Compare[T Comparable](i, j T) func() bool {
 // can - a custom can function to check authorization. If nil, DefaultCan is used.
 //
 // returns a true or false if the role or permission is allowed.
-func Can(ctx context.Context, role *Role, compare func() bool, permission string, ability Ability, can CanFn) bool {
-	if can == nil {
-		return DefaultCan(ctx, role, compare, permission, ability)
-	}
-	return can(ctx, role, compare, permission, ability)
-}
-
-// DefaultCan provides a default implementation for checking authorization.
-// It checks that the given permission exists.
-// If Manage permission is defined for the given role, it is allowed.
-// If Read, ReadAll, Update, or Delete are defined for the given role
-// and match the compare function is true, it is allowed.
-// Anything that doesn't match those above, will return false.
-func DefaultCan(ctx context.Context, role *Role, compare func() bool, permission string, ability Ability) bool {
+func Can(ctx context.Context, role *Role, permission string, ability Ability, compare func() bool) bool {
 	if role == nil {
 		return false
 	}
@@ -126,7 +166,7 @@ func DefaultCan(ctx context.Context, role *Role, compare func() bool, permission
 	switch ability {
 	case Manage:
 		return true
-	case Read, ReadAll, Create, Update, Delete:
+	case Read, Create, Update, Delete:
 		if compare == nil {
 			return false
 		}
