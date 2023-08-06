@@ -1,0 +1,8 @@
+admin:
+  permissions:
+    users:
+      - manage
+    approvals:
+      - read
+      - create
+      - update

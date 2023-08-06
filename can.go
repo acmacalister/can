@@ -23,24 +23,31 @@ type CanFn func(ctx context.Context, role *Role, compare func() bool, permission
 // resource control.
 type Ability int64
 
+// String implements the Stringer interface.
+//
+// returns a string representation of the ability type
 func (a Ability) String() string {
 	switch a {
 	case Manage:
-		return "Manage"
+		return "manage"
 	case Read:
-		return "Read"
+		return "read"
 	case Create:
-		return "Create"
+		return "create"
 	case Update:
-		return "Update"
+		return "update"
 	case Delete:
-		return "Delete"
+		return "delete"
 	}
-
-	return "Custom"
+	return ""
 }
 
-func stringToAbility(s string) Ability {
+// StringToAbility converts a string to an ability type
+//
+// s is a string to convert
+//
+// returns an ability or -1 if the string is incorrect
+func StringToAbility(s string) Ability {
 	switch strings.ToLower(s) {
 	case "manage":
 		return Manage
@@ -54,7 +61,7 @@ func stringToAbility(s string) Ability {
 		return Delete
 	}
 
-	return 100
+	return -1
 }
 
 const (
@@ -84,21 +91,26 @@ type Role struct {
 	Permissions map[string]Permission `json:"permissions" db:"permissions" yaml:"permissions"`
 }
 
+// Roles is a map of Role type
+// use for disk encoding rbac setting
 type Roles map[string]*Role
 
+// diskRole is the private struct that represents how
+// the roles are encoded in yaml to disk
 type diskRole struct {
 	Permission map[string][]string `yaml:"permissions"`
 }
 
+// diskRoles is a map of diskRole
 type diskRoles map[string]diskRole
 
+// UnmarshalYAML implement the yaml Unmarshaler interface
 func (r Roles) UnmarshalYAML(value *yaml.Node) error {
 	var diskYaml diskRoles
 	if err := value.Decode(&diskYaml); err != nil {
 		return err
 	}
 
-	r = make(Roles)
 	for k, v := range diskYaml {
 		p := buildPermissions(v.Permission)
 		r[k] = &Role{
@@ -121,7 +133,7 @@ func buildPermissions(dp map[string][]string) map[string]Permission {
 func buildAbility(abilities []string) map[Ability]struct{} {
 	a := make(map[Ability]struct{})
 	for _, ability := range abilities {
-		a[Ability(stringToAbility(ability))] = struct{}{}
+		a[Ability(StringToAbility(ability))] = struct{}{}
 	}
 
 	return a
@@ -137,13 +149,17 @@ func Compare[T Comparable](i, j T) func() bool {
 	return func() bool { return result }
 }
 
+// OpenFile takes a yaml file and returns a map of Roles
+// filename - yaml encoded file for parsing
+//
+// returns a map of Roles and an error
 func OpenFile(filename string) (Roles, error) {
-	f, err := os.OpenFile("rbac.yml", os.O_RDONLY, 0600)
+	f, err := os.OpenFile(filename, os.O_RDONLY, 0600)
 	if err != nil {
 		return nil, err
 	}
 
-	var r Roles
+	r := make(Roles)
 	if err := yaml.NewDecoder(f).Decode(&r); err != nil {
 		return nil, err
 	}
@@ -151,20 +167,19 @@ func OpenFile(filename string) (Roles, error) {
 	return r, nil
 }
 
-// Can is the heart and soul of the can package. It can take a custom can function to do various authorization checking
+// Can is the heart and soul of the can package. It can take a custom compare function to do various authorization checking
+//
 // ctx - a standard ctx to pass to authorization. Useful for passing additional request specific data and canceling the can
 // function call if it was signal to a remote authorization service.
 //
 // role - a role structure that contains the role and permissions to check authorization on.
 //
-// compare - a simple function to check request specific data. Things like if a user can update
-// their own comments or the like.
-//
 // permission - defines the permission to check of a given object.
 //
 // ability - defines the ability to check of a given object.
 //
-// can - a custom can function to check authorization. If nil, DefaultCan is used.
+// compare - a simple function to check request specific data. Things like if a user can update
+// their own comments or the like.
 //
 // returns a true or false if the role or permission is allowed.
 func Can(ctx context.Context, role *Role, permission string, ability Ability, compare func() bool) bool {
@@ -194,6 +209,9 @@ func Can(ctx context.Context, role *Role, permission string, ability Ability, co
 	return false
 }
 
+// BuildFromRequest uses standard Rest conventions to build a
+// permission and ability from the request. Useful for implementing
+// authorization middleware
 func BuildFromRequest(r *http.Request) (string, Ability) {
 	perm := path.Base(r.URL.Path)
 
