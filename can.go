@@ -7,6 +7,7 @@ package can
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"golang.org/x/exp/constraints"
@@ -131,6 +132,20 @@ type Comparable interface {
 func Compare[T Comparable](i, j T) func() bool {
 	result := i == j
 	return func() bool { return result }
+}
+
+func OpenFile(filename string) (Roles, error) {
+	f, err := os.OpenFile("rbac.yml", os.O_RDONLY, 0600)
+	if err != nil {
+		return nil, err
+	}
+
+	var r Roles
+	if err := yaml.NewDecoder(f).Decode(&r); err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 // Can is the heart and soul of the can package. It can take a custom can function to do various authorization checking
