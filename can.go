@@ -7,7 +7,9 @@ package can
 
 import (
 	"context"
+	"net/http"
 	"os"
+	"path"
 	"strings"
 
 	"golang.org/x/exp/constraints"
@@ -96,6 +98,7 @@ func (r Roles) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
+	r = make(Roles)
 	for k, v := range diskYaml {
 		p := buildPermissions(v.Permission)
 		r[k] = &Role{
@@ -189,4 +192,22 @@ func Can(ctx context.Context, role *Role, permission string, ability Ability, co
 	}
 
 	return false
+}
+
+func BuildFromRequest(r *http.Request) (string, Ability) {
+	perm := path.Base(r.URL.Path)
+
+	var ability Ability
+	switch r.Method {
+	case http.MethodGet:
+		ability = Read
+	case http.MethodPost:
+		ability = Create
+	case http.MethodPut, http.MethodPatch:
+		ability = Update
+	case http.MethodDelete:
+		ability = Delete
+	}
+
+	return perm, ability
 }
