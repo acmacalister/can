@@ -9,7 +9,6 @@ import (
 	"context"
 	"net/http"
 	"os"
-	"path"
 	"strings"
 
 	"golang.org/x/exp/constraints"
@@ -28,8 +27,8 @@ type Ability int64
 // returns a string representation of the ability type
 func (a Ability) String() string {
 	switch a {
-	case Manage:
-		return "manage"
+	case All:
+		return "all"
 	case Read:
 		return "read"
 	case Create:
@@ -38,8 +37,10 @@ func (a Ability) String() string {
 		return "update"
 	case Delete:
 		return "delete"
+	case Skip:
+		return "skip"
 	}
-	return ""
+	return "none"
 }
 
 // StringToAbility converts a string to an ability type
@@ -49,8 +50,8 @@ func (a Ability) String() string {
 // returns an ability or -1 if the string is incorrect
 func StringToAbility(s string) Ability {
 	switch strings.ToLower(s) {
-	case "manage":
-		return Manage
+	case "all":
+		return All
 	case "read":
 		return Read
 	case "create":
@@ -59,22 +60,31 @@ func StringToAbility(s string) Ability {
 		return Update
 	case "delete":
 		return Delete
+	case "skip":
+		return Skip
 	}
 
-	return -1
+	return None
 }
 
 const (
-	// Manage is a default for full control or "admin" abilities.
-	Manage Ability = iota
-	// Read is a default for access to a given resource.
-	Read
-	// Create is a default for creating a given resource.
+	// Read is for access to a given resource
+	Read Ability = iota
+	// Create is for creating a given resource
 	Create
-	// Update is a default for updating a given resource.
+	// Update is for updating a given resource
 	Update
-	// Delete is a default for deleting a given resource.
+	// Delete is for deleting a given resource
 	Delete
+	// All is read/create/update/delete for a give resource
+	All
+	// Skip is for skipping authorization lookups on a given resource.
+	// Useful if for options style results and when authorization might be
+	// handled later in a request chain.
+	Skip
+	// None is useful for signaling no access to given resource. Also useful for
+	// error states
+	None
 )
 
 // Permission provides typed structure for general permissions or
@@ -121,6 +131,7 @@ func (r Roles) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// buildPermissions converts config representations of roles into in Roles structs
 func buildPermissions(dp map[string][]string) map[string]Permission {
 	p := make(map[string]Permission)
 	for k, v := range dp {
@@ -130,6 +141,7 @@ func buildPermissions(dp map[string][]string) map[string]Permission {
 	return p
 }
 
+// buildAbility converts config representations of roles into in Roles structs
 func buildAbility(abilities []string) map[Ability]struct{} {
 	a := make(map[Ability]struct{})
 	for _, ability := range abilities {
@@ -152,7 +164,7 @@ func Compare[T Comparable](i, j T) func() bool {
 // OpenFile takes a yaml file and returns a map of Roles
 // filename - yaml encoded file for parsing
 //
-// returns a map of Roles and an error
+// returns - a map of Roles and an error
 func OpenFile(filename string) (Roles, error) {
 	f, err := os.OpenFile(filename, os.O_RDONLY, 0600)
 	if err != nil {
@@ -192,12 +204,12 @@ func Can(ctx context.Context, role *Role, permission string, ability Ability, co
 		return false
 	}
 
-	if _, ok := perm.Abilities[ability]; !ok {
+	if _, ok := perm.Abilities[ability]; !ok && ability != All {
 		return false
 	}
 
 	switch ability {
-	case Manage:
+	case All, Skip:
 		return true
 	case Read, Create, Update, Delete:
 		if compare == nil {
@@ -209,23 +221,26 @@ func Can(ctx context.Context, role *Role, permission string, ability Ability, co
 	return false
 }
 
-// BuildFromRequest uses standard Rest conventions to build a
+// BuildFromMethod uses standard Rest conventions to build a
 // permission and ability from the request. Useful for implementing
 // authorization middleware
-func BuildFromRequest(r *http.Request) (string, Ability) {
-	perm := path.Base(r.URL.Path)
-
-	var ability Ability
-	switch r.Method {
+//
+// method - a string representation of an HTTP verb. GET/POST/PUT, etc
+//
+// returns - an ability
+func BuildFromMethod(method string) Ability {
+	switch method {
 	case http.MethodGet:
-		ability = Read
+		return Read
 	case http.MethodPost:
-		ability = Create
+		return Create
 	case http.MethodPut, http.MethodPatch:
-		ability = Update
+		return Update
 	case http.MethodDelete:
-		ability = Delete
+		return Delete
+	case http.MethodOptions:
+		return Skip
 	}
 
-	return perm, ability
+	return None
 }

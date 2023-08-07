@@ -1,7 +1,9 @@
 admin:
   permissions:
+    index:
+      - all
     users:
-      - manage
+      - all
     approvals:
       - read
       - create

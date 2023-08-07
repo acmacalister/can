@@ -18,7 +18,7 @@ func TestOpenFile(t *testing.T) {
 		t.Fatal("fail")
 	}
 
-	if _, ok := perm.Abilities[Manage]; !ok {
+	if _, ok := perm.Abilities[All]; !ok {
 		t.Fatal("fail")
 	}
 }
