@@ -204,7 +204,10 @@ func Can(ctx context.Context, role *Role, permission string, ability Ability, co
 		return false
 	}
 
-	if _, ok := perm.Abilities[ability]; !ok && ability != All {
+	_, ok = perm.Abilities[ability]
+	_, okAll := perm.Abilities[All]
+	_, okSkip := perm.Abilities[Skip]
+	if !ok && !okAll && !okSkip {
 		return false
 	}
 
