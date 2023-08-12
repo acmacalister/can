@@ -4,7 +4,10 @@ admin:
       - all
     users:
       - all
-    approvals:
+user:
+  permissions:
+    index:
+      - all
+    users:
       - read
-      - create
-      - update
+    

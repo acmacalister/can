@@ -1,0 +1,16 @@
+host:
+  other: other cool config data!
+
+roles:
+  admin:
+    permissions:
+      index:
+        - all
+      users:
+        - all
+  user:
+    permissions:
+      index:
+        - all
+      users:
+        - read

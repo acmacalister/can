@@ -107,16 +107,16 @@ type Roles map[string]*Role
 
 // diskRole is the private struct that represents how
 // the roles are encoded in yaml to disk
-type diskRole struct {
+type DiskRole struct {
 	Permission map[string][]string `yaml:"permissions"`
 }
 
 // diskRoles is a map of diskRole
-type diskRoles map[string]diskRole
+type DiskRoles map[string]DiskRole
 
 // UnmarshalYAML implement the yaml Unmarshaler interface
 func (r Roles) UnmarshalYAML(value *yaml.Node) error {
-	var diskYaml diskRoles
+	var diskYaml DiskRoles
 	if err := value.Decode(&diskYaml); err != nil {
 		return err
 	}
@@ -177,6 +177,24 @@ func OpenFile(filename string) (Roles, error) {
 	}
 
 	return r, nil
+}
+
+// Config takes a per parsed config file and return a map of Roles.
+// Useful if the config file is a different format than yaml or
+// if the config file is parsed elsewhere.
+// c - a set of disk roles
+//
+// returns - a map of Roles
+func Config(c DiskRoles) Roles {
+	r := make(Roles)
+	for k, v := range c {
+		p := buildPermissions(v.Permission)
+		r[k] = &Role{
+			Permissions: p,
+		}
+	}
+
+	return r
 }
 
 // Can is the heart and soul of the can package. It can take a custom compare function to do various authorization checking
