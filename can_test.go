@@ -47,6 +47,12 @@ func TestCan(t *testing.T) {
 	}) {
 		t.Fatal("failed user auth resource read check")
 	}
+
+	if Can(context.Background(), userRole, "books_search", Read, func() bool {
+		return false // if it wasn't there resource for example
+	}) {
+		t.Fatal("failed user auth resource read check")
+	}
 }
 
 func TestOpenFile(t *testing.T) {
@@ -60,7 +66,7 @@ func TestOpenFile(t *testing.T) {
 		t.Fatal("fail")
 	}
 
-	perm, ok := role.Permissions["users"]
+	perm, ok := role["users"]
 	if !ok {
 		t.Fatal("fail")
 	}
@@ -92,7 +98,7 @@ func TestConfig(t *testing.T) {
 		t.Fatal("fail")
 	}
 
-	perm, ok := role.Permissions["users"]
+	perm, ok := role["users"]
 	if !ok {
 		t.Fatal("fail")
 	}

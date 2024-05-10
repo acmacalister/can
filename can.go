@@ -7,10 +7,12 @@ package can
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/exp/constraints"
 	"gopkg.in/yaml.v3"
 )
@@ -92,26 +94,27 @@ const (
 // other types to extend the permissions (see examples).
 type Permission struct {
 	Abilities map[Ability]struct{} `json:"abilities" db:"abilities" yaml:"abilities"`
+	Resource  string               `json:"resource" db:"resource" yaml:"resource"`
 }
 
 // Role provides typed structure for general roles that
 // enumerates a set of permissions. This struct is easily embedded in
 // other types to extend the role (see examples).
-type Role struct {
-	Permissions map[string]Permission `json:"permissions" db:"permissions" yaml:"permissions"`
-}
+type Role map[string]Permission
 
-// Roles is a map of Role type
-// use for disk encoding rbac setting
-type Roles map[string]*Role
+type Roles map[string]Role
+
+type DiskPermission struct {
+	Abilities []string `json:"abilities" db:"abilities" yaml:"abilities"`
+	Routes    []string `json:"routes" db:"routes" yaml:"routes"`
+	Resource  string   `json:"resource" db:"resource" yaml:"resource"`
+}
 
 // diskRole is the private struct that represents how
 // the roles are encoded in yaml to disk
-type DiskRole struct {
-	Permission map[string][]string `yaml:"permissions"`
-}
+type DiskRole map[string]DiskPermission
 
-// diskRoles is a map of diskRole
+// DiskRoles is a map of roles that are encoded in yaml
 type DiskRoles map[string]DiskRole
 
 // UnmarshalYAML implement the yaml Unmarshaler interface
@@ -121,27 +124,29 @@ func (r Roles) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 
-	for k, v := range diskYaml {
-		p := buildPermissions(v.Permission)
-		r[k] = &Role{
-			Permissions: p,
-		}
-	}
-
+	buildRole(diskYaml, &r)
 	return nil
 }
 
-// buildPermissions converts config representations of roles into in Roles structs
-func buildPermissions(dp map[string][]string) map[string]Permission {
-	p := make(map[string]Permission)
-	for k, v := range dp {
-		p[k] = Permission{Abilities: buildAbility(v)}
+// buildRole converts config representations of roles into in Roles structs
+func buildRole(diskYaml DiskRoles, r *Roles) {
+	for k, v := range diskYaml {
+		newRole := make(Role)
+		for j, p := range v {
+			per := Permission{
+				Abilities: buildAbility(p.Abilities),
+				Resource:  p.Resource,
+			}
+			for _, route := range p.Routes {
+				newRole[fmt.Sprintf("%s_%s", j, route)] = per
+			}
+			newRole[j] = per
+		}
+		(*r)[k] = newRole
 	}
-
-	return p
 }
 
-// buildAbility converts config representations of roles into in Roles structs
+// buildAbility converts config representations of abilities into in Ability structs
 func buildAbility(abilities []string) map[Ability]struct{} {
 	a := make(map[Ability]struct{})
 	for _, ability := range abilities {
@@ -187,13 +192,7 @@ func OpenFile(filename string) (Roles, error) {
 // returns - a map of Roles
 func Config(c DiskRoles) Roles {
 	r := make(Roles)
-	for k, v := range c {
-		p := buildPermissions(v.Permission)
-		r[k] = &Role{
-			Permissions: p,
-		}
-	}
-
+	buildRole(c, &r)
 	return r
 }
 
@@ -212,12 +211,12 @@ func Config(c DiskRoles) Roles {
 // their own comments or the like.
 //
 // returns a true or false if the role or permission is allowed.
-func Can(ctx context.Context, role *Role, permission string, ability Ability, compare func() bool) bool {
+func Can(ctx context.Context, role Role, permission string, ability Ability, compare func() bool) bool {
 	if role == nil {
 		return false
 	}
 
-	perm, ok := role.Permissions[permission]
+	perm, ok := role[permission]
 	if !ok {
 		return false
 	}
@@ -264,4 +263,37 @@ func BuildFromMethod(method string) Ability {
 	}
 
 	return None
+}
+
+// PermissionFromPath uses the request path to build a permission
+// that can be used to check authorization in the Can function.
+// Uses the chi router context to build the permission.
+//
+// r - a standard http request
+//
+// returns - a string representation of a permission
+func PermissionFromPath(r *http.Request) string {
+	p := r.URL.Path
+
+	if p == "/" {
+		return "index"
+	}
+
+	if p[:3] == "/v1" {
+		p = p[3:]
+	}
+
+	c := chi.RouteContext(r.Context())
+	for _, v := range c.URLParams.Values {
+		if v == "" {
+			continue
+		}
+		p = strings.ReplaceAll(p, v, "")
+	}
+
+	if p[len(p)-1:] == "/" {
+		p = p[:len(p)-1]
+	}
+
+	return strings.ReplaceAll(p[1:], "/", "_")
 }

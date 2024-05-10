@@ -3,14 +3,26 @@ host:
 
 roles:
   admin:
-    permissions:
-      index:
+    index:
+      abilities:
         - all
-      users:
+    users:
+      abilities:
         - all
+    books:
+      abilities:
+        - all
+      routes:
+        - search
   user:
-    permissions:
-      index:
+    index:
+      abilities:
         - all
-      users:
+    users:
+      abilities:
         - read
+    books:
+      abilities:
+        - all
+      routes:
+        - search
