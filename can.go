@@ -228,6 +228,10 @@ func Can(ctx context.Context, role Role, permission string, ability Ability, com
 		return false
 	}
 
+	if okAll || okSkip {
+		return true
+	}
+
 	switch ability {
 	case All, Skip:
 		return true
